@@ -14,6 +14,8 @@ pub use stake_system::StakeSystem;
 pub use validator_system::ValidatorSystem;
 pub use liq_pool::LiqPool;
 
+use crate::ID;
+
 
 #[account]
 pub struct StakePoolConfig {
@@ -112,5 +114,12 @@ impl StakePoolConfig {
         .try_to_vec()
         .unwrap().len() 
         + 8
+    }
+
+    pub fn find_msol_mint_authority(stake_pool: &Pubkey) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[&stake_pool.to_bytes()[..32], Self::MSOL_MINT_AUTHORITY_SEED],
+            &ID
+        )
     }
 }

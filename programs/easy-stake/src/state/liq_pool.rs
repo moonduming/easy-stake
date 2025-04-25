@@ -1,4 +1,7 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, solana_program::native_token::LAMPORTS_PER_SOL};
+use anchor_spl::token::spl_token;
+
+use crate::{error::StakingError, require_lte, ID};
 
 use super::Fee;
 
@@ -40,4 +43,87 @@ pub struct LiqPool {
 
     /// sol_leg 最大可存储的 SOL 数量上限（防止过度注入）
     pub liquidity_sol_cap: u64,
+}
+
+
+impl LiqPool {
+    /// 用于派生 LP Mint 权限 PDA 的种子
+    pub const LP_MINT_AUTHORITY_SEED: &'static [u8] = b"liq_mint";
+    /// 用于派生 sol_leg PDA 的种子
+    pub const SOL_LEG_SEED: &'static [u8] = b"liq_sol";
+    /// 用于派生 mSOL leg 权限 PDA 的种子
+    pub const MSOL_LEG_AUTHORITY_SEED: &'static [u8] = b"liq_st_sol_authority";
+    /// 用于派生 mSOL leg 账户 PDA 的种子（作为字符串）
+    pub const MSOL_LEG_SEED: &'static str = "liq_st_sol";
+    /// 协议允许设定的最大 LP 赎回手续费（上限为 10%）
+    pub const MAX_FEE: Fee = Fee::from_basis_points(1000); // 10%
+    /// 流动性池最小目标 SOL 存量（50 SOL），用于控制 LP 铸造速率
+    pub const MIN_LIQUIDITY_TARGET: u64 = 50 * LAMPORTS_PER_SOL; // 50 SOL
+    /// 协议国库收益分成的最大比例（上限为 75%）
+    pub const MAX_TREASURY_CUT: Fee = Fee::from_basis_points(7500);
+
+
+    pub fn find_lp_mint_authority(stake_pool: &Pubkey) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[&stake_pool.to_bytes()[..32], Self::LP_MINT_AUTHORITY_SEED], 
+            &ID
+        )
+    }
+
+    pub fn find_sol_leg_address(stake_pool: &Pubkey) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[&stake_pool.to_bytes()[..32], Self::SOL_LEG_SEED], 
+            &ID
+        )
+    }
+
+    pub fn find_msol_leg_authority(stake_pool: &Pubkey) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[&stake_pool.to_bytes()[..32], Self::MSOL_LEG_AUTHORITY_SEED],
+            &ID,
+        )
+    }
+
+    pub fn default_msol_leg_address(stake_pool: &Pubkey) -> Pubkey {
+        Pubkey::create_with_seed(
+            stake_pool, 
+            Self::MSOL_LEG_SEED, 
+            &spl_token::ID)
+        .unwrap()
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        self.lp_min_fee
+            .check()
+            .map_err(|e| e.with_source(source!()))?;
+        self.lp_max_fee
+            .check()
+            .map_err(|e| e.with_source(source!()))?;
+        self.treasury_cut
+            .check()
+            .map_err(|e| e.with_source(source!()))?;
+
+        require_lte!(
+            self.lp_max_fee,
+            Self::MAX_FEE,
+            StakingError::LpMaxFeeIsTooHigh
+        );
+        require_gte!(
+            self.lp_max_fee,
+            self.lp_min_fee,
+            StakingError::LpFeesAreWrongWayRound
+        );
+        require_gte!(
+            self.lp_liquidity_target,
+            Self::MIN_LIQUIDITY_TARGET,
+            StakingError::LiquidityTargetTooLow
+        );
+        require_lte!(
+            self.treasury_cut,
+            Self::MAX_TREASURY_CUT,
+            StakingError::TreasuryCutIsTooHigh
+        );
+
+        Ok(())
+    }
 }
