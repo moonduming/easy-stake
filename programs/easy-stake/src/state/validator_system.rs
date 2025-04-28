@@ -7,10 +7,19 @@ use super::list::List;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, AnchorSerialize, AnchorDeserialize)]
 pub struct ValidatorRecord {
+    /// 验证者的主账户地址（vote account），用于标识唯一的验证者节点
     pub validator_account: Pubkey,
+
+    /// 当前该验证者已分配的质押 SOL 数量（单位：lamports），用于记录 stake 余额
     pub active_balance: u64,
+
+    /// 验证者的得分，根据此分数按比例分配 stake
     pub score: u32,
+
+    /// 上次 stake delta 更新所在的 epoch，用于防止在同一 epoch 内重复调整 stake
     pub last_stake_delta_epoch: u64,
+
+    /// 与验证者地址和状态地址一起派生去重标志 PDA 的 bump 值，用于 PDA 派生和校验
     pub duplication_flag_bump_seed: u8,
 }
 

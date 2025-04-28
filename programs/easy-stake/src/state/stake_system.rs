@@ -5,10 +5,18 @@ use crate::{error::StakingError, ID};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, AnchorSerialize, AnchorDeserialize)]
 pub struct StakeRecord {
+    /// 用户质押时创建的 stake account 地址
     pub stake_account: Pubkey,
+
+    /// 上次更新时记录的已委托 lamports（用于计算 delta）
     pub last_update_delegated_lamports: u64,
+
+    /// 上次更新时的 epoch（用于判断是否需要更新）
     pub last_update_epoch: u64,
-    pub is_emergency_unstaking: u8, // 1 for cooling down after emergency unstake, 0 otherwise
+
+    /// 是否是紧急解押状态（1 表示冷却中，0 表示正常）
+    /// 1 表示紧急解押后处于冷却中，0 表示正常状态
+    pub is_emergency_unstaking: u8,
 }
 
 impl StakeRecord {

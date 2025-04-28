@@ -1,25 +1,44 @@
-use anchor_lang::{prelude::*, solana_program::program_pack::Pack};
-use anchor_spl::token::{spl_token, Mint, TokenAccount};
+use anchor_lang::{
+    prelude::*, 
+    solana_program::{
+        system_instruction, 
+        program::invoke, 
+        program_pack::Pack
+    }
+};
+use anchor_spl::token::{self, spl_token::{self, instruction::AuthorityType}, Mint, SetAuthority, Token, TokenAccount};
 
 
-use crate::{checks::{check_freeze_authority, check_mint_authority, check_mint_empty, check_token_mint, check_token_owner}, error::StakingError, require_lte, state::{Fee, LiqPool, StakePoolConfig, StakeSystem, ValidatorSystem}};
+use crate::{error::StakingError, require_lte, state::{Fee, LiqPool, StakePoolConfig, StakeSystem, ValidatorSystem}};
 
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
     /// 初始化时的质押池配置账户，要求账户数据为零
-    #[account(zero)]
+    #[account(
+        init,
+        payer = payer,
+        space = StakePoolConfig::serialized_len(),
+        seeds = [StakePoolConfig::STAKE_POOL_CONFIG_SEED],
+        bump,
+    )]
     pub stake_pool_config: Box<Account<'info, StakePoolConfig>>,
 
-    /// 质押池配置的储备PDA账户，使用种子和bump生成
+    ///CHECK: 质押池配置的储备PDA账户，使用种子和bump生成
     #[account(
+        init,
+        payer = payer,
+        space = 0,
         seeds = [
             &stake_pool_config.key().to_bytes(),
             StakePoolConfig::RESERVE_SEED
         ],
         bump
     )]
-    pub reserve_pda: SystemAccount<'info>,
+    pub reserve_pda: UncheckedAccount<'info>,
 
     /// CHECK: 初始化时允许未校验账户，后续会在逻辑中验证 owner 和结构合法性
     pub stake_list: UncheckedAccount<'info>,
@@ -27,31 +46,112 @@ pub struct Initialize<'info> {
     /// CHECK: 此账户在初始化后将由逻辑手动校验其 owner 和数据内容
     pub validator_list: UncheckedAccount<'info>,
 
+    #[account(
+        seeds = [
+            stake_pool_config.key().as_ref(), 
+            StakePoolConfig::MSOL_MINT_AUTHORITY_SEED
+        ],
+        bump
+    )]
+    /// CHECK: PDA，用于铸造/销毁 mSOL
+    pub msol_mint_authority: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [
+            stake_pool_config.key().as_ref(), 
+            LiqPool::LP_MINT_AUTHORITY_SEED
+        ],
+        bump
+    )]
+    /// CHECK: PDA，用于铸造/销毁 lp token
+    pub lp_mint_authority: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [
+            stake_pool_config.key().as_ref(), 
+            LiqPool::MSOL_LEG_AUTHORITY_SEED
+        ],
+        bump
+    )]
+    /// CHECK: PDA，用于铸造/销毁 mSOL
+    pub msol_leg_authority: UncheckedAccount<'info>,
+
     /// mSOL代币铸造账户
+    #[account(
+        init,
+        payer = payer,
+        seeds = [
+            stake_pool_config.key().as_ref(), 
+            StakePoolConfig::MSOL_MINT_SEED
+        ],
+        bump,
+        mint::decimals = 9,
+        mint::authority = msol_mint_authority
+    )]
     pub msol_mint: Box<Account<'info, Mint>>,
+
+    /// LP代币铸造账户
+    #[account(
+        init,
+        payer = payer,
+        seeds = [
+            stake_pool_config.key().as_ref(), 
+            LiqPool::LP_MINT_SEED
+        ],
+        bump,
+        mint::decimals = 9,
+        mint::authority = lp_mint_authority
+    )]
+    pub lp_mint: Box<Account<'info, Mint>>,
+
+    /// 用于流动性池中存储 MSOL 的 PDA 账户
+    #[account(
+        init,
+        payer = payer,
+        seeds = [
+            stake_pool_config.key().as_ref(), 
+            LiqPool::MSOL_LEG_SEED
+        ],
+        bump,
+        token::mint = msol_mint,
+        token::authority = msol_leg_authority
+    )]
+    pub msol_leg: Box<Account<'info, TokenAccount>>,
 
     /// 操作用的SOL账户
     pub operational_sol_account: SystemAccount<'info>,
 
-    /// 流动性池相关账户集合
-    pub liq_pool: LiqPoolInitialize<'info>,
+    /// CHECK: 用于流动性池中存储 SOL 的 PDA 账户
+    #[account(
+        init,
+        payer = payer,
+        space = 0,
+        seeds = [
+            stake_pool_config.key().as_ref(),
+            LiqPool::SOL_LEG_SEED
+        ],
+        bump
+    )]
+    pub sol_leg_pda: UncheckedAccount<'info>,
 
     /// 用于托管mSOL的Token账户，需与msol_mint对应
-    #[account(token::mint = msol_mint)]
+    #[account(
+        init,
+        payer = payer,
+        seeds = [
+            stake_pool_config.key().as_ref(), 
+            StakePoolConfig::TREASURY_MSOL_SEED
+        ],
+        bump,
+        token::mint = msol_mint,
+        token::authority = stake_pool_config
+    )]
     pub treasury_msol_account: Box<Account<'info, TokenAccount>>,
 
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>
 }
 
-
-#[derive(Accounts)]
-pub struct LiqPoolInitialize<'info> {
-    /// LP代币铸造账户
-    pub lp_mint: Box<Account<'info, Mint>>,
-    /// 用于流动性池中存储 SOL 的 PDA 账户
-    pub sol_leg_pda: SystemAccount<'info>,
-    /// 用于流动性池中存储 MSOL 的 PDA 账户
-    pub msol_leg: Box<Account<'info, TokenAccount>>
-}
 
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, AnchorSerialize, AnchorDeserialize)]
@@ -110,26 +210,75 @@ impl<'info> Initialize<'info> {
         self.stake_pool_config.to_account_info().key
     }
 
-    fn check_reserve_pda(&self, required_lamports: u64) -> Result<()> {
-        require_eq!(self.reserve_pda.lamports(), required_lamports);
+    // 将 mint 账户调整为不能冻结
+    fn set_authority<'a>(
+        token_program: &AccountInfo<'a>,
+        mint_authority: &AccountInfo<'a>,
+        mint: &AccountInfo<'a>,
+        seeds: &[&[u8]]
+    ) -> Result<()> {
+        token::set_authority(
+            CpiContext::new_with_signer(
+                token_program.clone(), 
+                SetAuthority {
+                    current_authority: mint_authority.clone(),
+                    account_or_mint: mint.clone()
+                }, 
+                &[seeds]
+            ), 
+            AuthorityType::FreezeAccount, 
+        None
+        )
+    }
+
+    // 给初始化的 sol 系统账户转入lamport，避免账户被恶意占用
+    fn pin_address_with_lamport<'a>(
+        from: &AccountInfo<'a>,
+        to: &AccountInfo<'a>,
+        system_program: &AccountInfo<'a>,
+        num: u64
+    ) -> Result<()> {
+        if **to.lamports.borrow() == 0 {
+            invoke(
+                &system_instruction::transfer(from.key, to.key, num), 
+                &[from.clone(), to.clone(), system_program.clone()]
+            )?;
+        }
 
         Ok(())
     }
 
-    fn check_msol_mint(&mut self) -> Result<u8> {
-        let (authority_address, bump) = StakePoolConfig::find_msol_mint_authority(self.stake_pool_address());
+    fn init_lip_pool(
+        &self, 
+        data: LiqPoolInitializeData,
+        lp_mint_authority_bump_seed: u8,
+        sol_leg_bump_seed: u8,
+        msol_leg_authority_bump_seed: u8,
+    ) -> Result<LiqPool> {
+        let liq_pool = LiqPool {
+            lp_mint: self.lp_mint.key(),
+            lp_mint_authority_bump_seed,
+            sol_leg_bump_seed,
+            msol_leg_authority_bump_seed,
+            msol_leg: self.msol_leg.key(),
+            lp_liquidity_target: data.lp_liquidity_target,
+            lp_max_fee: data.lp_max_fee,
+            lp_min_fee: data.lp_min_fee,
+            treasury_cut: data.lp_treasury_cut,
+            lp_supply: 0,
+            lent_from_sol_leg: 0,
+            liquidity_sol_cap: std::u64::MAX
+        };
 
-        check_mint_authority(&self.msol_mint, &authority_address, "msol_mint")?;
-        check_mint_empty(&self.msol_mint, "msol_mint")?;
-        check_freeze_authority(&self.msol_mint, "msol_mint")?;
+        liq_pool.validate()?;
 
-        Ok(bump)
+        Ok(liq_pool)
     }
 
     pub fn process(
         &mut self, 
         initialize_data: InitializeData, 
-        reserve_pda_bump: u8
+        bumps: InitializeBumps
     ) -> Result<()> {
         require_lte!(
             initialize_data.rewards_fee, 
@@ -151,17 +300,57 @@ impl<'info> Initialize<'info> {
         );
 
         let rent_exempt_for_token_acc = Rent::get()?.minimum_balance(spl_token::state::Account::LEN);
-        self.check_reserve_pda(rent_exempt_for_token_acc)?;
 
-        let msol_mint_authority_bump_seed = self.check_msol_mint()?;
+        // 给reserve_pda转入免租金
+        Self::pin_address_with_lamport(
+            &self.payer.to_account_info(), 
+            &self.reserve_pda.to_account_info(), 
+            &self.system_program.to_account_info(), 
+            rent_exempt_for_token_acc
+        )?;
+
+        // 给sol_leg_pda转入免租金
+        Self::pin_address_with_lamport(
+            &self.payer.to_account_info(), 
+            &self.sol_leg_pda.to_account_info(), 
+            &self.system_program.to_account_info(), 
+            rent_exempt_for_token_acc
+        )?;
+
+        // 将 msol_mint 和 lp_mint 设置为不可冻结
+        let auth_key = self.stake_pool_config.key();
+        let msol_auth_seeds = &[
+            auth_key.as_ref(),
+            StakePoolConfig::MSOL_MINT_AUTHORITY_SEED,
+            &[bumps.msol_mint_authority]
+        ];
+        let lp_auth_seeds = &[
+            auth_key.as_ref(),
+            LiqPool::LP_MINT_AUTHORITY_SEED,
+            &[bumps.lp_mint_authority]
+        ];
+
+        Self::set_authority(
+            &self.token_program.to_account_info(), 
+            &self.msol_mint_authority.to_account_info(), 
+            &self.msol_mint.to_account_info(), 
+            msol_auth_seeds
+        )?;
+
+        Self::set_authority(
+            &self.token_program.to_account_info(), 
+            &self.lp_mint_authority.to_account_info(), 
+            &self.lp_mint.to_account_info(), 
+            lp_auth_seeds
+        )?;
 
         self.stake_pool_config.set_inner(StakePoolConfig {
             msol_mint: self.msol_mint.key(),
             admin_authority: initialize_data.admin_authority,
             operational_sol_account: self.operational_sol_account.key(),
             treasury_msol_account: self.treasury_msol_account.key(),
-            reserve_bump_seed: reserve_pda_bump,
-            msol_mint_authority_bump_seed,
+            reserve_bump_seed: bumps.reserve_pda,
+            msol_mint_authority_bump_seed: bumps.msol_mint_authority,
             rent_exempt_for_token_acc,
             reward_fee: initialize_data.rewards_fee,
             stake_system: StakeSystem::new(
@@ -179,10 +368,12 @@ impl<'info> Initialize<'info> {
                 initialize_data.validator_manager_authority, 
                 initialize_data.additional_validator_record_space
             )?,
-            liq_pool: LiqPoolInitialize::process(
+            liq_pool: Self::init_lip_pool(
                 self, 
                 initialize_data.liq_pool, 
-                rent_exempt_for_token_acc
+                bumps.lp_mint_authority,
+                bumps.sol_leg_pda,
+                bumps.msol_leg_authority
             )?,
             available_reserve_balance: 0,
             msol_supply: 0,
@@ -201,64 +392,3 @@ impl<'info> Initialize<'info> {
 
 }
 
-
-impl<'info> LiqPoolInitialize<'info> {
-    pub fn check_lp_mint(parent: &Initialize) -> Result<u8> {
-        require_keys_neq!(parent.liq_pool.lp_mint.key(), parent.msol_mint.key());
-        let (authority_address, bump) = LiqPool::find_lp_mint_authority(parent.stake_pool_address());
-
-        check_mint_authority(&parent.liq_pool.lp_mint, &authority_address, "lp_mint")?;
-        check_mint_empty(&parent.liq_pool.lp_mint, "lp_mint")?;
-        check_freeze_authority(&parent.liq_pool.lp_mint, "lp_mint")?;
-
-        Ok(bump)
-    }
-
-    pub fn check_sol_leg(parent: &Initialize, required_lamports: u64) -> Result<u8> {
-        let (address, bump) = LiqPool::find_sol_leg_address(parent.stake_pool_address());
-        require_keys_eq!(parent.liq_pool.sol_leg_pda.key(), address);
-        require_eq!(parent.liq_pool.sol_leg_pda.lamports(), required_lamports);
-
-        Ok(bump)
-    }
-
-    pub fn check_msol_leg(parent: &Initialize) -> Result<u8> {
-        check_token_mint(
-            &parent.liq_pool.msol_leg, 
-            &parent.msol_mint.key(), 
-            "liq_msol"
-        )?;
-        let (msol_authority, bump) = LiqPool::find_msol_leg_authority(parent.stake_pool_address());
-        check_token_owner(&parent.liq_pool.msol_leg, &msol_authority, "liq_msol_leg")?;
-
-        Ok(bump)
-    }
-
-    pub fn process(
-        parent: &Initialize, 
-        data: LiqPoolInitializeData,
-        required_sol_leg_lamports: u64
-    ) -> Result<LiqPool> {
-        let lp_mint_authority_bump_seed = Self::check_lp_mint(parent)?;
-        let sol_leg_bump_seed = Self::check_sol_leg(parent, required_sol_leg_lamports)?;
-        let msol_leg_authority_bump_seed = Self::check_msol_leg(parent)?;
-        let liq_pool = LiqPool {
-            lp_mint: parent.liq_pool.lp_mint.key(),
-            lp_mint_authority_bump_seed,
-            sol_leg_bump_seed,
-            msol_leg_authority_bump_seed,
-            msol_leg: parent.liq_pool.msol_leg.key(),
-            lp_liquidity_target: data.lp_liquidity_target,
-            lp_max_fee: data.lp_max_fee,
-            lp_min_fee: data.lp_min_fee,
-            treasury_cut: data.lp_treasury_cut,
-            lp_supply: 0,
-            lent_from_sol_leg: 0,
-            liquidity_sol_cap: std::u64::MAX
-        };
-
-        liq_pool.validate()?;
-
-        Ok(liq_pool)
-    }
-}

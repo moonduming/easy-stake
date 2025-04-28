@@ -17,7 +17,7 @@ pub mod easy_stake {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>, data: InitializeData) -> Result<()> {
-        ctx.accounts.process(data, ctx.bumps.reserve_pda)
+        ctx.accounts.process(data, ctx.bumps)
     }
 }
 

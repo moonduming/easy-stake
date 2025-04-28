@@ -90,14 +90,20 @@ pub struct StakePoolConfig {
 impl StakePoolConfig {
     /// mSOL 价格的分母，用于计算价格比例
     pub const PRICE_DENOMINATOR: u64 = 0x1_0000_0000;
+    /// 全局账户种子
+    pub const STAKE_POOL_CONFIG_SEED: &'static [u8] = b"stake_pool";
     /// reserve PDA 派生种子，用于生成保留账户地址
     pub const RESERVE_SEED: &'static [u8] = b"reserve";
     /// mSOL mint authority PDA 派生种子，用于 mint 权限管理
     pub const MSOL_MINT_AUTHORITY_SEED: &'static [u8] = b"st_mint";
+    /// msom mint 种子
+    pub const MSOL_MINT_SEED: &'static [u8] = b"msol_mint";
     /// 质押列表 PDA 派生种子字符串
     pub const STAKE_LIST_SEED: &'static str = "stake_list";
     /// 验证者列表 PDA 派生种子字符串
     pub const VALIDATOR_LIST_SEED: &'static str = "validator_list";
+    /// 用于托管mSOL的Token PDA账户 种子
+    pub const TREASURY_MSOL_SEED: &'static [u8] = b"treasury_msol";
     /// 最大奖励手续费，单位为基点（1000 = 10%）
     pub const MAX_REWARD_FEE: Fee = Fee::from_basis_points(1_000);
     /// 最大单笔提现金额，单位为 lamports（0.1 SOL）
