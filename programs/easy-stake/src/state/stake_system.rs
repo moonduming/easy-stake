@@ -1,3 +1,5 @@
+//! 质押用户系统信息
+
 use anchor_lang::{prelude::*, solana_program::clock::Epoch};
 
 use super::list::List;
@@ -75,9 +77,6 @@ pub struct StakeSystem {
     /// 实际的 stake account 数据存储在本账户后续字节中，由程序通过偏移访问
     pub stake_list: List,
 
-    /// 正在延迟解押状态中的 SOL 总数（冷却中）
-    pub delayed_unstake_cooling_down: u64,
-
     /// 派生 stake 存款地址时使用的 bump seed
     pub stake_deposit_bump_seed: u8,
 
@@ -104,6 +103,8 @@ impl StakeSystem {
     pub const STAKE_DEPOSIT_SEED: &'static [u8] = b"deposit";
     /// stake delta 重新计算前必须经过的最小 slot 间隔
     pub const MIN_UPDATE_WINDOW: u64 = 3_000;
+    /// StakeRecord 长度
+    pub const STAKE_RECORD_LEN: usize = 49;
 
     pub fn new(
         stake_pool: &Pubkey,
@@ -116,7 +117,7 @@ impl StakeSystem {
     ) -> Result<Self> {
         let stake_list = List::new(
             StakeList::DISCRIMINATOR,
-            StakeRecord::default().try_to_vec().unwrap().len() as u32 + additional_stake_record_space,
+            Self::STAKE_RECORD_LEN as u32 + additional_stake_record_space,
             stake_list_account,
             stake_list_data,
         )
@@ -124,7 +125,6 @@ impl StakeSystem {
 
         Ok(Self { 
             stake_list, 
-            delayed_unstake_cooling_down: 0, 
             stake_deposit_bump_seed: Self::find_stake_deposit_authority(stake_pool).1, 
             stake_withdraw_bump_seed: Self::find_stake_withdraw_authority(stake_pool).1, 
             slots_for_stake_delta, 

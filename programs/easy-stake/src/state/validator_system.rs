@@ -1,3 +1,5 @@
+//! 验证管理系统信息
+
 use anchor_lang::prelude::*;
 
 use crate::{error::StakingError, ID};
@@ -122,6 +124,9 @@ pub struct ValidatorSystem {
 
 
 impl ValidatorSystem {
+    /// ValidatorRecord 大小
+    pub const VALIDATOR_RECORD_LEN: usize = 53;
+
     pub fn new(
         validator_list_account: Pubkey,
         validator_list_data: &mut [u8],
@@ -131,7 +136,7 @@ impl ValidatorSystem {
         Ok(Self {
             validator_list: List::new(
                 ValidatorList::DISCRIMINATOR, 
-                ValidatorRecord::default().try_to_vec().unwrap().len() as u32 + additional_record_space, 
+                Self::VALIDATOR_RECORD_LEN as u32 + additional_record_space, 
                 validator_list_account, 
                 validator_list_data
             ).map_err(|e| e.with_account_name("validator_list"))?,

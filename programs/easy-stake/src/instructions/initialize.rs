@@ -6,10 +6,33 @@ use anchor_lang::{
         program_pack::Pack
     }
 };
-use anchor_spl::token::{self, spl_token::{self, instruction::AuthorityType}, Mint, SetAuthority, Token, TokenAccount};
+use anchor_spl::token::{spl_token, Mint, Token, TokenAccount};
 
 
 use crate::{error::StakingError, require_lte, state::{Fee, LiqPool, StakePoolConfig, StakeSystem, ValidatorSystem}};
+
+
+#[event]
+pub struct InitializeEvent {
+    /// 全局 StakePool 配置账户的地址
+    pub state: Pubkey,
+    /// 初始化时传入的参数数据
+    pub params: InitializeData,
+    /// 质押记录列表账户地址
+    pub stake_list: Pubkey,
+    /// 验证者记录列表账户地址
+    pub validator_list: Pubkey,
+    /// mSOL 代币 Mint 账户地址
+    pub msol_mint: Pubkey,
+    /// 用于运营操作的原生 SOL 账户地址
+    pub operational_sol_account: Pubkey,
+    /// LP 代币 Mint 账户地址
+    pub lp_mint: Pubkey,
+    /// 用于存储流动性池中 mSOL 的账户地址
+    pub lp_msol_leg: Pubkey,
+    /// 协议国库存储 mSOL 的账户地址
+    pub treasury_msol_account: Pubkey,
+}
 
 
 #[derive(Accounts)]
@@ -33,7 +56,7 @@ pub struct Initialize<'info> {
         payer = payer,
         space = 0,
         seeds = [
-            &stake_pool_config.key().to_bytes(),
+            stake_pool_config.key().as_ref(),
             StakePoolConfig::RESERVE_SEED
         ],
         bump
@@ -41,9 +64,29 @@ pub struct Initialize<'info> {
     pub reserve_pda: UncheckedAccount<'info>,
 
     /// CHECK: 初始化时允许未校验账户，后续会在逻辑中验证 owner 和结构合法性
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + StakeSystem::STAKE_RECORD_LEN * 100,
+        seeds = [
+            stake_pool_config.key().as_ref(),
+            StakePoolConfig::STAKE_LIST_SEED
+        ],
+        bump
+    )]
     pub stake_list: UncheckedAccount<'info>,
 
     /// CHECK: 此账户在初始化后将由逻辑手动校验其 owner 和数据内容
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + ValidatorSystem::VALIDATOR_RECORD_LEN * 100,
+        seeds = [
+            stake_pool_config.key().as_ref(),
+            StakePoolConfig::VALIDATOR_LIST_SEED
+        ],
+        bump
+    )]
     pub validator_list: UncheckedAccount<'info>,
 
     #[account(
@@ -153,7 +196,6 @@ pub struct Initialize<'info> {
 }
 
 
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, AnchorSerialize, AnchorDeserialize)]
 pub struct LiqPoolInitializeData {
     /// 流动性池目标流动性规模（单位：lamports），用于控制 LP 铸造速率
@@ -208,27 +250,6 @@ impl<'info> Initialize<'info> {
 
     pub fn stake_pool_address(&self) -> &Pubkey {
         self.stake_pool_config.to_account_info().key
-    }
-
-    // 将 mint 账户调整为不能冻结
-    fn set_authority<'a>(
-        token_program: &AccountInfo<'a>,
-        mint_authority: &AccountInfo<'a>,
-        mint: &AccountInfo<'a>,
-        seeds: &[&[u8]]
-    ) -> Result<()> {
-        token::set_authority(
-            CpiContext::new_with_signer(
-                token_program.clone(), 
-                SetAuthority {
-                    current_authority: mint_authority.clone(),
-                    account_or_mint: mint.clone()
-                }, 
-                &[seeds]
-            ), 
-            AuthorityType::FreezeAccount, 
-        None
-        )
     }
 
     // 给初始化的 sol 系统账户转入lamport，避免账户被恶意占用
@@ -317,33 +338,6 @@ impl<'info> Initialize<'info> {
             rent_exempt_for_token_acc
         )?;
 
-        // 将 msol_mint 和 lp_mint 设置为不可冻结
-        let auth_key = self.stake_pool_config.key();
-        let msol_auth_seeds = &[
-            auth_key.as_ref(),
-            StakePoolConfig::MSOL_MINT_AUTHORITY_SEED,
-            &[bumps.msol_mint_authority]
-        ];
-        let lp_auth_seeds = &[
-            auth_key.as_ref(),
-            LiqPool::LP_MINT_AUTHORITY_SEED,
-            &[bumps.lp_mint_authority]
-        ];
-
-        Self::set_authority(
-            &self.token_program.to_account_info(), 
-            &self.msol_mint_authority.to_account_info(), 
-            &self.msol_mint.to_account_info(), 
-            msol_auth_seeds
-        )?;
-
-        Self::set_authority(
-            &self.token_program.to_account_info(), 
-            &self.lp_mint_authority.to_account_info(), 
-            &self.lp_mint.to_account_info(), 
-            lp_auth_seeds
-        )?;
-
         self.stake_pool_config.set_inner(StakePoolConfig {
             msol_mint: self.msol_mint.key(),
             admin_authority: initialize_data.admin_authority,
@@ -387,8 +381,21 @@ impl<'info> Initialize<'info> {
             stake_moved: 0,
             max_stake_moved_per_epoch: Fee::from_basis_points(10000), // 100%
         });
+
+        // 事件记录
+        emit!(InitializeEvent {
+            state: self.stake_pool_config.key(),
+            params: initialize_data,
+            stake_list: self.stake_list.key(),
+            validator_list: self.validator_list.key(),
+            msol_mint: self.msol_mint.key(),
+            operational_sol_account: self.operational_sol_account.key(),
+            lp_mint: self.lp_mint.key(),
+            lp_msol_leg: self.msol_leg.key(),
+            treasury_msol_account: self.treasury_msol_account.key()
+        });
+
         Ok(())
     }
 
 }
-

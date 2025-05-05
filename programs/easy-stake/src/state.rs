@@ -14,7 +14,7 @@ pub use stake_system::StakeSystem;
 pub use validator_system::ValidatorSystem;
 pub use liq_pool::LiqPool;
 
-use crate::ID;
+use crate::{calc::{shares_from_value, value_from_shares}, error::StakingError, require_lte, ID};
 
 
 #[account]
@@ -99,9 +99,9 @@ impl StakePoolConfig {
     /// msom mint 种子
     pub const MSOL_MINT_SEED: &'static [u8] = b"msol_mint";
     /// 质押列表 PDA 派生种子字符串
-    pub const STAKE_LIST_SEED: &'static str = "stake_list";
+    pub const STAKE_LIST_SEED: &'static [u8] = b"stake_list";
     /// 验证者列表 PDA 派生种子字符串
-    pub const VALIDATOR_LIST_SEED: &'static str = "validator_list";
+    pub const VALIDATOR_LIST_SEED: &'static [u8] = b"validator_list";
     /// 用于托管mSOL的Token PDA账户 种子
     pub const TREASURY_MSOL_SEED: &'static [u8] = b"treasury_msol";
     /// 最大奖励手续费，单位为基点（1000 = 10%）
@@ -127,5 +127,47 @@ impl StakePoolConfig {
             &[&stake_pool.to_bytes()[..32], Self::MSOL_MINT_AUTHORITY_SEED],
             &ID
         )
+    }
+
+    pub fn on_msol_mint(&mut self, amount: u64) {
+        self.msol_supply += amount
+    }
+
+    pub fn on_transfer_to_reserve(&mut self, amount: u64) {
+        self.available_reserve_balance += amount
+    }
+
+    pub fn total_staked_lamports(&self) -> u64 {
+        self.validator_system.total_active_balance 
+            + self.available_reserve_balance
+    }
+
+    pub fn calc_msol_from_lamports(&self, stake_lamports: u64) -> Result<u64> {
+        shares_from_value(
+            stake_lamports, 
+            self.total_staked_lamports(), 
+        self.msol_supply
+        )
+    }
+
+    pub fn msol_to_sol(&self, msol_amount: u64) -> Result<u64> {
+        value_from_shares(
+            msol_amount, 
+            self.total_staked_lamports(), 
+            self.msol_supply
+        )
+    }
+
+    pub fn check_staking_cap(&self, transfering_lamports: u64) -> Result<()> {
+        let result_amount = self.validator_system.total_active_balance 
+            + transfering_lamports;
+
+        require_lte!(
+            result_amount,
+            self.staking_sol_cap,
+            StakingError::StakingIsCapped
+        );
+        
+        Ok(())
     }
 }
