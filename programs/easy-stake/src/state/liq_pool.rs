@@ -1,6 +1,6 @@
 use anchor_lang::{prelude::*, solana_program::native_token::LAMPORTS_PER_SOL};
 
-use crate::{error::StakingError, require_lte, ID};
+use crate::{calc::proportional, error::StakingError, require_lte, ID};
 
 use super::Fee;
 
@@ -118,5 +118,23 @@ impl LiqPool {
         );
 
         Ok(())
+    }
+
+    pub fn delta(&self) -> u32 {
+        self.lp_max_fee.basis_points.saturating_sub(self.lp_min_fee.basis_points)
+    }
+
+    pub fn linear_fee(&self, lamports: u64) -> Fee {
+        if lamports >= self.lp_liquidity_target {
+            self.lp_min_fee
+        } else {
+            Fee {
+                basis_points: self.lp_max_fee.basis_points - proportional(
+                    self.delta() as u64, 
+                    lamports, 
+                    self.lp_liquidity_target
+                ).unwrap() as u32
+            }
+        }
     }
 }

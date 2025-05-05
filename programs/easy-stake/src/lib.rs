@@ -40,4 +40,9 @@ pub mod easy_stake {
         check_context(&ctx)?;
         ctx.accounts.process(lamports)
     }
+
+    pub fn unstake(ctx: Context<Unstake>, msol_amount: u64) -> Result<()> {
+        check_context(&ctx)?;
+        ctx.accounts.process(msol_amount)
+    }
 }

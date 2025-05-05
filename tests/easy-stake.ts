@@ -68,7 +68,7 @@ describe("easy-stake", () => {
         basisPoints: 500
       },
       liqPool: {                            // LiqPoolInitializeData
-        lpLiquidityTarget: new anchor.BN(50_000_000_000), // 10 SOL 目标流动性
+        lpLiquidityTarget: new anchor.BN(50_000_000_000), // 50 SOL 目标流动性
         lpMaxFee: { basisPoints: 300 },     // 最大赎回费 3%
         lpMinFee: { basisPoints: 50 },     // 最小赎回费 0.5%
         lpTreasuryCut: { basisPoints: 200 } // 国库抽成 2%

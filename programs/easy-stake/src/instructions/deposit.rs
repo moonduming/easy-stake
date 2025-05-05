@@ -43,7 +43,10 @@ pub struct Deposit<'info> {
     )]
     pub stake_pool_config: Box<Account<'info, StakePoolConfig>>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        mint::authority = msol_mint_authority
+    )]
     pub msol_mint: Box<Account<'info, Mint>>,
 
     #[account(
@@ -142,6 +145,7 @@ impl<'info> Deposit<'info> {
         let msol_swapped = user_msol_buy_order.min(msol_leg_balance);
         msg!("--- swap_MSOL_max {}", msol_swapped);
 
+        // 计算实际进入池子的sol
         let sol_swapped = if msol_swapped > 0 {
             let sol_swapped = if user_msol_buy_order == msol_swapped {
                 lamports
@@ -159,7 +163,7 @@ impl<'info> Deposit<'info> {
                         authority: self.liq_pool_msol_leg_authority.to_account_info()
                     }, 
                     &[&[
-                        &self.stake_pool_config.key().to_bytes(),
+                        self.stake_pool_config.key().as_array(),
                         LiqPool::MSOL_LEG_AUTHORITY_SEED,
                         &[self.stake_pool_config.msol_mint_authority_bump_seed]
                     ]]
@@ -185,9 +189,11 @@ impl<'info> Deposit<'info> {
         };
 
         let sol_deposited = lamports - sol_swapped;
+        // 未进入池子的 sol
         if sol_deposited > 0 {
             self.stake_pool_config.check_staking_cap(sol_deposited)?;
 
+            // 将 sol 转入 reserve_pda 账户
             transfer(
                 CpiContext::new(
                     self.system_program.to_account_info(), 
@@ -203,6 +209,7 @@ impl<'info> Deposit<'info> {
         }
 
         let msol_minted = user_msol_buy_order - msol_swapped;
+        // 未能通过池子兑换的 msol 调用 msol mint 进行铸造
         if msol_minted > 0 {
             msg!("--- msol_to_mint {}", msol_minted);
             mint_to(
@@ -214,7 +221,7 @@ impl<'info> Deposit<'info> {
                         authority: self.msol_mint_authority.to_account_info()
                     }, 
                     &[&[
-                        &self.stake_pool_config.key().to_bytes(),
+                        self.stake_pool_config.key().as_ref(),
                         StakePoolConfig::MSOL_MINT_AUTHORITY_SEED,
                         &[self.stake_pool_config.msol_mint_authority_bump_seed]
                     ]]
@@ -225,6 +232,7 @@ impl<'info> Deposit<'info> {
             self.stake_pool_config.on_msol_mint(msol_minted);
         }
 
+        // 链下事件记录
         emit!(DepositEvent {
             state: self.stake_pool_config.key(),
             sol_owner: self.user.key(),

@@ -41,4 +41,8 @@ impl Fee {
 
         Ok(())
     }
+
+    pub fn apply(&self, lamports: u64) -> u64 {
+        (lamports as u128 * self.basis_points as u128 / Self::MAX_BASIS_POINTS as u128) as u64
+    }
 }
