@@ -145,4 +145,27 @@ impl ValidatorSystem {
             total_active_balance: 0
         })
     }
+
+    pub fn add(
+        &mut self,
+        validator_list_data: &mut [u8],
+        validator_account: Pubkey,
+        score: u32,
+        stake_config_key: &Pubkey,
+        duplication_flag_address: &Pubkey
+    ) -> Result<()> {
+        self.validator_list.push(
+            validator_list_data, 
+            ValidatorRecord::new(
+                validator_account, 
+                score, 
+                stake_config_key, 
+                duplication_flag_address
+            )?
+        ).map_err(|e| e.with_account_name("validator_list"))?;
+
+        self.total_validator_score += score;
+        
+        Ok(())
+    }
 }

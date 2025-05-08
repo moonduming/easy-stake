@@ -137,4 +137,30 @@ impl LiqPool {
             }
         }
     }
+
+    pub fn check_liquidity_cap(
+        &self, 
+        transfering_lamports: u64,
+        sol_leg_balance: u64
+    ) -> Result<()> {
+        let result_amount = sol_leg_balance
+            .checked_add(transfering_lamports)
+            .ok_or(StakingError::MathOverflow)?;
+
+        require_lte!(
+            result_amount,
+            self.liquidity_sol_cap,
+            StakingError::LiquidityIsCapped
+        );
+
+        Ok(())
+    }
+
+    pub fn on_lp_mint(&mut self, amount: u64) {
+        self.lp_supply += amount
+    }
+
+    pub fn on_lp_burn(&mut self, amount: u64) {
+        self.lp_supply -= amount
+    }
 }

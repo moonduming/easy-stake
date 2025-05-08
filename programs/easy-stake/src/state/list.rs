@@ -1,5 +1,9 @@
+use std::io::Cursor;
+
 use anchor_lang::prelude::*;
 use borsh::BorshSchema;
+
+use crate::{error::StakingError, require_lt};
 
 
 #[derive(Default, Clone, AnchorSerialize, AnchorDeserialize, BorshSchema, Debug)]
@@ -44,6 +48,35 @@ impl List {
         }
 
         data[0..8].copy_from_slice(discriminator);
+
+        Ok(())
+    }
+
+    pub fn capacity(&self, account_len: usize) -> Result<u32> {
+        Ok(u32::try_from(
+            account_len
+                .checked_sub(8)
+                .ok_or(ProgramError::AccountDataTooSmall)?
+            )
+            .map_err(|_| error!(StakingError::CalculationFailure))?
+            .checked_div(self.item_size)
+            .unwrap_or(std::u32::MAX)
+        )
+    }
+
+    pub fn push<I: AnchorSerialize>(
+        &mut self, 
+        data: &mut [u8], 
+        item: I
+    ) -> Result<()>  {
+        let capacity = self.capacity(data.len())?;
+        require_lt!(self.count, capacity, StakingError::ListOverflow);
+
+        let start = 8 + (self.count * self.item_size) as usize;
+        let mut cursor = Cursor::new(&mut data[start..(start + self.item_size as usize)]);
+        item.serialize(&mut cursor)?;
+
+        self.count += 1;
 
         Ok(())
     }

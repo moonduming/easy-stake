@@ -40,7 +40,9 @@ pub struct Unstake<'info> {
     #[account(
         mut,
         has_one = treasury_msol_account,
-        has_one = msol_mint
+        has_one = msol_mint,
+        seeds = [StakePoolConfig::STAKE_POOL_CONFIG_SEED],
+        bump = stake_pool_config.stake_bump
     )]
     pub stake_pool_config: Box<Account<'info, StakePoolConfig>>,
 

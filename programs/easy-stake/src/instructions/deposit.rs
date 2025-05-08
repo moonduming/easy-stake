@@ -4,11 +4,21 @@ use anchor_lang::{prelude::*, system_program::{self, transfer, Transfer}};
 use anchor_spl::{
     associated_token::AssociatedToken, 
     token::{
-        mint_to, transfer as transfer_tokens, Mint, MintTo, Token, TokenAccount, Transfer as TransferTokens
+        mint_to, 
+        transfer as transfer_tokens, 
+        Mint, 
+        MintTo, 
+        Token, 
+        TokenAccount, 
+        Transfer as TransferTokens
     }
 };
 
-use crate::{error::StakingError, require_lte, state::{LiqPool, StakePoolConfig}};
+use crate::{
+    error::StakingError, 
+    require_lte, 
+    state::{LiqPool, StakePoolConfig}
+};
 
 
 #[event]
@@ -39,7 +49,8 @@ pub struct Deposit<'info> {
 
     #[account(
         mut,
-        has_one = msol_mint
+        seeds = [StakePoolConfig::STAKE_POOL_CONFIG_SEED],
+        bump = stake_pool_config.stake_bump,
     )]
     pub stake_pool_config: Box<Account<'info, StakePoolConfig>>,
 

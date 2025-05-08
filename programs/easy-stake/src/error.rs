@@ -224,7 +224,7 @@ pub enum StakingError {
     #[msg("部分mSOL代币在marinade合约外被铸造")]
     UnregisteredMsolMinted, // 6071 0x17b7
 
-    #[msg("部分LP代币在marinade合约外被铸造")]
+    #[msg("部分LP代币在质押合约外被铸造")]
     UnregisteredLPMinted, // 6072 0x17b8
 
     #[msg("列表索引越界")]
@@ -269,4 +269,10 @@ pub enum StakingError {
 
     #[msg("列表容量不得小于当前大小")]
     ShrinkingListWithDeletingContents, // 6086 0x17c6
+
+    #[msg("计算溢出")]
+    MathOverflow, // 6087 0x17c7
+
+    #[msg("检测到未经授权或存在漏洞的 LP 代币铸造行为")]
+    UnauthorizedOrExploitedLPMinting, // 6088 0x17c8
 }

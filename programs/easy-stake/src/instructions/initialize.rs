@@ -340,6 +340,7 @@ impl<'info> Initialize<'info> {
 
         self.stake_pool_config.set_inner(StakePoolConfig {
             msol_mint: self.msol_mint.key(),
+            stake_bump: bumps.stake_pool_config,
             admin_authority: initialize_data.admin_authority,
             operational_sol_account: self.operational_sol_account.key(),
             treasury_msol_account: self.treasury_msol_account.key(),

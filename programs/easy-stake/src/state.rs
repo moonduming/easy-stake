@@ -22,6 +22,9 @@ pub struct StakePoolConfig {
     /// mSOL 的 mint 地址，用于铸造和销毁 mSOL
     pub msol_mint: Pubkey,
 
+    /// 全局账户bump
+    pub stake_bump: u8,
+
     /// 管理员地址，拥有修改参数权限
     pub admin_authority: Pubkey,
 
