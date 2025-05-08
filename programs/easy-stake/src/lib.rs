@@ -66,4 +66,14 @@ pub mod easy_stake {
         check_context(&ctx)?;
         ctx.accounts.process(score)
     }
+
+    // 移除验证者
+    pub fn remove_validator(
+        ctx: Context<RemoveValidator>,
+        index: u32,
+        validator_vote: Pubkey
+    ) -> Result<()> {
+        check_context(&ctx)?;
+        ctx.accounts.process(index, validator_vote)
+    }
 }

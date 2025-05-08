@@ -1,3 +1,5 @@
+//! 添加验证者
+
 use anchor_lang::{prelude::*, system_program::ID as sys_id};
 
 use crate::{

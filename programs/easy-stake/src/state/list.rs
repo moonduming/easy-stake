@@ -80,4 +80,44 @@ impl List {
 
         Ok(())
     }
+
+    pub fn get<I: AnchorDeserialize>(
+        &self,
+        data: &[u8],
+        index: u32
+    ) -> Result<I> {
+        require_lt!(index, self.count, StakingError::ListIndexOutOfBounds);
+
+        let start = 8 + (index * self.item_size) as usize;
+
+        I::deserialize(&mut &data[start..(start + self.item_size as usize)])
+            .map_err(|err| {
+                Error::from(ProgramError::BorshIoError(err.to_string()))
+                    .with_source(source!())
+            }
+        )
+    }
+
+    pub fn remove(
+        &mut self,
+        data: &mut [u8],
+        index: u32
+    ) -> Result<()> {
+        require_lt!(index, self.count, StakingError::ListIndexOutOfBounds);
+
+        self.count -= 1;
+        // 删除的是最后一位数据，不需要在进行处理
+        if index == self.count {
+            return Ok(());
+        }
+        
+        let start = 8 + (index * self.item_size) as usize;
+        let last_item_start = 8 + (self.count * self.item_size) as usize;
+        data.copy_within(
+            last_item_start..last_item_start + self.item_size as usize, 
+            start
+        );
+
+        Ok(())
+    }
 }

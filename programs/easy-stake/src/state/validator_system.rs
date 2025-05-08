@@ -40,6 +40,26 @@ impl ValidatorRecord {
         )
     }
 
+    pub fn with_duplication_flag_seeds<R, F: FnOnce(&[&[u8]]) -> R>(
+        &self,
+        stake_pool: &Pubkey,
+        f: F
+    ) -> R {
+        f(&[
+            &stake_pool.to_bytes()[..32],
+            Self::DUPLICATE_FLAG_SEED,
+            &self.validator_account.to_bytes()[..32],
+            &[self.duplication_flag_bump_seed]
+        ])
+    }
+
+    pub fn duplication_flag_address(&self, stake_pool: &Pubkey) -> Pubkey {
+        self.with_duplication_flag_seeds(
+            stake_pool, |seeds| Pubkey::create_program_address(seeds, &ID)
+                .unwrap()
+        )
+    }
+
     pub fn new(
         validator_account: Pubkey,
         score: u32,
@@ -166,6 +186,52 @@ impl ValidatorSystem {
 
         self.total_validator_score += score;
         
+        Ok(())
+    }
+
+    pub fn get(
+        &self,
+        validator_list_data: &[u8],
+        index: u32
+    ) -> Result<ValidatorRecord> {
+        self.validator_list.get(validator_list_data, index)
+            .map_err(|e| e.with_account_name("validator_list"))
+    }
+
+    pub fn get_checked(
+        &self,
+        validator_list_data: &[u8],
+        index: u32,
+        received_pubkey: Pubkey
+    ) -> Result<ValidatorRecord> {
+        let validator_record = self.get(validator_list_data, index)?;
+
+        require_keys_eq!(
+            validator_record.validator_account,
+            received_pubkey,
+            StakingError::WrongValidatorAccountOrIndex
+        );
+
+        Ok(validator_record)
+    }
+
+    pub fn remove(
+        &mut self,
+        validator_list_data: &mut [u8],
+        index: u32,
+        record: ValidatorRecord
+    ) -> Result<()> {
+        require_eq!(
+            record.active_balance,
+            0,
+            StakingError::RemovingValidatorWithBalance
+        );
+
+        self.total_validator_score -= record.score;
+        
+        self.validator_list.remove(validator_list_data, index)
+            .map_err(|e| e.with_account_name("validator_list"))?;
+
         Ok(())
     }
 }
