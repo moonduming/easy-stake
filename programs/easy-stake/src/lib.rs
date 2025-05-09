@@ -87,4 +87,13 @@ pub mod easy_stake {
         check_context(&ctx)?;
         ctx.accounts.process(index, validator_vote, score)
     }
+
+    // 验证者列表扩容
+    pub fn realloc_validator_list(
+        ctx: Context<ReallocValidatorList>,
+        capacity: u32
+    ) -> Result<()> {
+        check_context(&ctx)?;
+        ctx.accounts.process(capacity)
+    }
 }
