@@ -189,6 +189,19 @@ impl ValidatorSystem {
         Ok(())
     }
 
+    pub fn set(
+        &self,
+        validator_list_data: &mut [u8],
+        index: u32,
+        validator_record: ValidatorRecord
+    ) -> Result<()> {
+        self.validator_list.set(
+            validator_list_data, 
+            index, 
+            validator_record
+        ).map_err(|e| e.with_account_name("validator_list"))
+    }
+
     pub fn get(
         &self,
         validator_list_data: &[u8],
@@ -230,8 +243,6 @@ impl ValidatorSystem {
         self.total_validator_score -= record.score;
         
         self.validator_list.remove(validator_list_data, index)
-            .map_err(|e| e.with_account_name("validator_list"))?;
-
-        Ok(())
+            .map_err(|e| e.with_account_name("validator_list"))
     }
 }

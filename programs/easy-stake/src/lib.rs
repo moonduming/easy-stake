@@ -76,4 +76,15 @@ pub mod easy_stake {
         check_context(&ctx)?;
         ctx.accounts.process(index, validator_vote)
     }
+
+    // 修改验证者评分
+    pub fn set_validator_score(
+        ctx: Context<SetValidatorScore>,
+        index: u32,
+        validator_vote: Pubkey,
+        score: u32
+    ) -> Result<()> {
+        check_context(&ctx)?;
+        ctx.accounts.process(index, validator_vote, score)
+    }
 }

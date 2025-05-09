@@ -98,6 +98,22 @@ impl List {
         )
     }
 
+    pub fn set<I: AnchorSerialize>(
+        &self,
+        data: &mut [u8],
+        index: u32,
+        item: I
+    ) -> Result<()> {
+        require_lt!(index, self.count, StakingError::ListIndexOutOfBounds);
+
+        let start = 8 + (index * self.item_size) as usize;
+        let mut cursor = Cursor::new(&mut data[start..(start + self.item_size as usize)]);
+        
+        item.serialize(&mut cursor)?;
+
+        Ok(())
+    }
+
     pub fn remove(
         &mut self,
         data: &mut [u8],
