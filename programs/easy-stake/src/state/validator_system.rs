@@ -2,7 +2,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::{error::StakingError, ID};
+use crate::{calc::proportional, error::StakingError, ID};
 
 use super::list::List;
 
@@ -244,5 +244,21 @@ impl ValidatorSystem {
         
         self.validator_list.remove(validator_list_data, index)
             .map_err(|e| e.with_account_name("validator_list"))
+    }
+
+    pub fn validator_stake_target(
+        &self,
+        validator: &ValidatorRecord,
+        total_stake_target: u64
+    ) -> Result<u64> {
+        if self.total_validator_score == 0 {
+            return Ok(0);
+        }
+
+        proportional(
+            total_stake_target, 
+            validator.score as u64, 
+            self.total_validator_score as u64
+        )
     }
 }

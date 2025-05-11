@@ -173,4 +173,8 @@ impl StakePoolConfig {
         
         Ok(())
     }
+
+    pub fn stake_delta(&self, reserve_balance: u64) -> u64 {
+        reserve_balance.saturating_sub(self.rent_exempt_for_token_acc)
+    }
 }

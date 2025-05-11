@@ -7,6 +7,7 @@ pub mod add_validator;
 pub mod remove_validator;
 pub mod set_validator_score;
 pub mod realloc_validator_list;
+pub mod stake_reserve;
 
 pub use initialize::*;
 pub use deposit::*;
@@ -17,3 +18,4 @@ pub use add_validator::*;
 pub use remove_validator::*;
 pub use set_validator_score::*;
 pub use realloc_validator_list::*;
+pub use stake_reserve::*;

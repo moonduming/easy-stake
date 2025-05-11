@@ -96,4 +96,13 @@ pub mod easy_stake {
         check_context(&ctx)?;
         ctx.accounts.process(capacity)
     }
+
+    // 质押sol到验证者节点
+    pub fn stake_reserve(
+        ctx: Context<StakeReserve>, 
+        validator_index: u32
+    ) -> Result<()> {
+        check_context(&ctx)?;
+        ctx.accounts.process(validator_index)
+    }
 }

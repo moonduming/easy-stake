@@ -147,4 +147,26 @@ impl StakeSystem {
             &ID,
         )
     }
+
+    pub fn add(
+        &mut self,
+        stake_list_data: &mut [u8],
+        stake_account: &Pubkey,
+        delegated_lamports: u64,
+        clock: &Clock,
+        is_emergency_unstaking: u8
+    ) -> Result<()> {
+        self.stake_list.push(
+            stake_list_data, 
+            StakeRecord::new(
+                stake_account, 
+                delegated_lamports, 
+                clock, 
+                is_emergency_unstaking
+            )
+        ).map_err(|e| e.with_account_name("stake_list"))?;
+
+        Ok(())
+    }
+
 }

@@ -1,5 +1,6 @@
 use anchor_lang::{
     prelude::*, 
+    system_program::ID as sys_id,
     solana_program::{
         system_instruction, 
         program::invoke, 
@@ -59,7 +60,8 @@ pub struct Initialize<'info> {
             stake_pool_config.key().as_ref(),
             StakePoolConfig::RESERVE_SEED
         ],
-        bump
+        bump,
+        owner = sys_id
     )]
     pub reserve_pda: UncheckedAccount<'info>,
 
@@ -173,7 +175,8 @@ pub struct Initialize<'info> {
             stake_pool_config.key().as_ref(),
             LiqPool::SOL_LEG_SEED
         ],
-        bump
+        bump,
+        owner = sys_id
     )]
     pub sol_leg_pda: UncheckedAccount<'info>,
 
