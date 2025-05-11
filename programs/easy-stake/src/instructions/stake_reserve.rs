@@ -7,7 +7,8 @@ use anchor_lang::{
         program::{invoke, invoke_signed}, 
         stake::{
             self,
-            config::ID as STAKE_CONFIG_ID, program::ID as STAKE_ID, 
+            config::ID as STAKE_CONFIG_ID, 
+            program::ID as STAKE_ID, 
             state::{Authorized, Lockup, StakeStateV2}
         }, 
         sysvar::stake_history::ID as STAKE_HISTORY_ID

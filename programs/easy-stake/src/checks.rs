@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{Mint, TokenAccount};
+use anchor_spl::{stake::StakeAccount, token::{Mint, TokenAccount}};
+
+use crate::error::StakingError;
 
 
 #[macro_export]
@@ -82,6 +84,35 @@ pub fn check_token_owner(token: &TokenAccount, owner: &Pubkey, field_name: &str)
             owner
         );
         return Err(Error::from(ProgramError::InvalidAccountData).with_source(source!()))
+    }
+
+    Ok(())
+}
+
+pub fn check_stake_amount_and_validator(
+    stake_state: &StakeAccount,
+    expected_stake_amount: u64,
+    validator_vote_pubkey: &Pubkey
+) -> Result<()> {
+    let delegation = stake_state
+        .delegation()
+        .ok_or(StakingError::StakeNotDelegated)?;
+
+    require_keys_eq!(
+        delegation.voter_pubkey,
+        *validator_vote_pubkey,
+        StakingError::WrongValidatorAccountOrIndex
+    );
+
+    let currently_staked = delegation.stake;
+
+    if currently_staked != expected_stake_amount {
+        msg!(
+            "Operation on a stake account not yet updated. expected stake:{}, current:{}",
+            expected_stake_amount,
+            currently_staked
+        );
+        return err!(StakingError::StakeAccountNotUpdatedYet);
     }
 
     Ok(())

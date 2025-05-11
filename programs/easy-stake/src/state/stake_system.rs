@@ -169,4 +169,32 @@ impl StakeSystem {
         Ok(())
     }
 
+    pub fn get(
+        &self,
+        stake_list_data: &[u8],
+        index: u32
+    ) -> Result<StakeRecord> {
+        self.stake_list.get(
+            stake_list_data, 
+            index
+        ).map_err(|e| e.with_account_name("stake_list"))
+    }
+
+    pub fn get_checked(
+        &self,
+        stake_list_data: &[u8],
+        index: u32,
+        received_pubkey: &Pubkey
+    ) -> Result<StakeRecord> {
+        let stake_record = self.get(stake_list_data, index)?;
+
+        require_keys_eq!(
+            stake_record.stake_account,
+            *received_pubkey,
+            StakingError::WrongStakeAccountOrIndex
+        );
+
+        Ok(stake_record)
+    }
+
 }
